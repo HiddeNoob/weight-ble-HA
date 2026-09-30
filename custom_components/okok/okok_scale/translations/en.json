@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BLE Scale",
+        "description": "Enter the Bluetooth MAC address of the scale.",
+        "data": { "scale_mac": "MAC address" }
+      }
+    },
+    "abort": { "already_configured": "This scale is already configured." }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Scale Settings",
+        "menu_options": {
+          "add_person": "Add person",
+          "remove_person": "Remove person"
+        }
+      },
+      "add_person": {
+        "title": "Add person",
+        "data": { "name": "Name" }
+      },
+      "remove_person": {
+        "title": "Remove person",
+        "data": { "person": "Person" }
+      }
+    }
+  },
+  "services": {
+    "assign": {
+      "name": "Assign measurement",
+      "description": "Assigns a pending scale measurement to a person."
+    }
+  }
+}

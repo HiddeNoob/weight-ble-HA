@@ -1,0 +1,18 @@
+assign:
+  name: Ölçümü kişiye ata
+  description: Bekleyen tartı ölçümünü bir kişiye atar.
+  fields:
+    person:
+      name: Kişi
+      required: true
+      selector:
+        text:
+    weight:
+      name: Ağırlık (kg)
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 400
+          step: 0.01
+          unit_of_measurement: kg

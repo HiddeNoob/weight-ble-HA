@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "BLE Tartı",
+        "description": "Tartının Bluetooth MAC adresini girin.",
+        "data": { "scale_mac": "MAC adresi" }
+      }
+    },
+    "abort": { "already_configured": "Bu tartı zaten ekli." }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Tartı Ayarları",
+        "menu_options": {
+          "add_person": "Kişi ekle",
+          "remove_person": "Kişi kaldır"
+        }
+      },
+      "add_person": {
+        "title": "Kişi ekle",
+        "data": { "name": "İsim" }
+      },
+      "remove_person": {
+        "title": "Kişi kaldır",
+        "data": { "person": "Kişi" }
+      }
+    }
+  },
+  "services": {
+    "assign": {
+      "name": "Ölçümü kişiye ata",
+      "description": "Bekleyen tartı ölçümünü bir kişiye atar."
+    }
+  }
+}
