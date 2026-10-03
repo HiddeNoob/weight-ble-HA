@@ -13,12 +13,14 @@ from homeassistant.components.bluetooth import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_call_later
 
 from .const import (
     CONF_PERSONS,
     CONF_PERSON_NAME,
-    CONF_SCALE_MAC,
+    CONF_SCALE_ADDRESS,
     DOMAIN,
+    EMPTY_TIMEOUT,
     EVENT_PENDING,
     MIN_VALID_WEIGHT,
     STABILITY_READINGS,
@@ -32,9 +34,7 @@ def parse_scale(data: bytes):
     off = 2 if (len(data) >= 15 and data[0] == 0xC0) else 0
     if len(data) < off + 13:
         return None
-    weight = int.from_bytes(data[off:off + 2], "big") / 100.0
-    mac = data[off + 7: off + 13]
-    return weight, mac
+    return int.from_bytes(data[off:off + 2], "big") / 100.0
 
 
 @dataclass
@@ -49,8 +49,7 @@ class TartiCoordinator:
         self.entry = entry
         cfg = {**entry.data, **entry.options}
 
-        self.scale_mac = cfg[CONF_SCALE_MAC].upper()
-        self.scale_mac_bytes = bytes.fromhex(self.scale_mac.replace(":", ""))
+        self.scale_address = cfg[CONF_SCALE_ADDRESS].upper()
 
         self.persons: dict[str, PersonState] = {
             p[CONF_PERSON_NAME]: PersonState(name=p[CONF_PERSON_NAME])
@@ -64,6 +63,7 @@ class TartiCoordinator:
         self._session_pending_fired = False
         self._pending_weight: float | None = None
         self._pending_candidates: list[str] = []
+        self._empty_timer = None
 
     @property
     def signal_person(self) -> str:
@@ -81,26 +81,27 @@ class TartiCoordinator:
         self._cancel.append(
             async_register_callback(
                 self.hass,
-                self._on_scale_adv,
-                BluetoothCallbackMatcher(address=self.scale_mac),
+                self._on_adv,
+                BluetoothCallbackMatcher(address=self.scale_address),
                 BluetoothScanningMode.PASSIVE,
             )
         )
-        _LOGGER.info("Tartı hazır: %s", self.scale_mac)
+        _LOGGER.info("Tartı hazır: %s, kişiler: %s",
+                     self.scale_address, list(self.persons))
 
     async def async_stop(self) -> None:
+        if self._empty_timer:
+            self._empty_timer()
+            self._empty_timer = None
         for c in self._cancel:
             c()
         self._cancel.clear()
 
     @callback
-    def _on_scale_adv(self, info: BluetoothServiceInfoBleak, _change) -> None:
+    def _on_adv(self, info: BluetoothServiceInfoBleak, _change) -> None:
         for _mid, data in info.manufacturer_data.items():
-            parsed = parse_scale(data)
-            if not parsed:
-                continue
-            weight, mac = parsed
-            if mac != self.scale_mac_bytes:
+            weight = parse_scale(data)
+            if weight is None:
                 continue
             self._handle_weight(weight)
             return
@@ -111,20 +112,36 @@ class TartiCoordinator:
         recent = self._weight_buffer[-STABILITY_READINGS:]
         return (max(recent) - min(recent)) <= STABILITY_TOLERANCE
 
-    def _set_occupied(self, occupied: bool) -> None:
-        if occupied == self._occupied:
+    def _set_occupied(self, v: bool) -> None:
+        if v == self._occupied:
             return
-        self._occupied = occupied
+        self._occupied = v
         async_dispatcher_send(self.hass, self.signal_binary)
 
+    def _reset_session(self) -> None:
+        self._weight_buffer.clear()
+        self._session_person = None
+        self._session_pending_fired = False
+        self._pending_weight = None
+        self._pending_candidates = []
+        self._set_occupied(False)
+
+    def _reset_timer(self) -> None:
+        if self._empty_timer:
+            self._empty_timer()
+        self._empty_timer = async_call_later(self.hass, EMPTY_TIMEOUT, self._on_timeout)
+
+    @callback
+    def _on_timeout(self, _now) -> None:
+        self._empty_timer = None
+        _LOGGER.debug("Tartı zaman aşımı, oturum sıfırlandı")
+        self._reset_session()
+
     def _handle_weight(self, weight: float) -> None:
+        self._reset_timer()
+
         if weight < MIN_VALID_WEIGHT:
-            self._weight_buffer.clear()
-            self._session_person = None
-            self._session_pending_fired = False
-            self._pending_weight = None
-            self._pending_candidates = []
-            self._set_occupied(False)
+            self._reset_session()
             return
 
         self._set_occupied(True)
@@ -136,10 +153,12 @@ class TartiCoordinator:
 
         stable = round(weight, 2)
 
+        # Oturum boyunca atanmış kişiye yaz
         if self._session_person is not None:
             self._set_person_weight(self._session_person, stable)
             return
 
+        # Henüz atanmadıysa bildirim (oturum başına 1 kez)
         if not self._session_pending_fired:
             self._session_pending_fired = True
             self._fire_pending(stable)

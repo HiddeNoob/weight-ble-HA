@@ -3,8 +3,8 @@
     "step": {
       "user": {
         "title": "BLE Tartı",
-        "description": "Tartının Bluetooth MAC adresini girin.",
-        "data": { "scale_mac": "MAC adresi" }
+        "description": "Tartının Bluetooth adresini (MAC veya UUID) girin.",
+        "data": { "scale_address": "Adres" }
       }
     },
     "abort": { "already_configured": "Bu tartı zaten ekli." }
